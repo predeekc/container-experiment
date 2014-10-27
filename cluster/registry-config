@@ -1,0 +1,23 @@
+#cloud-config
+coreos:
+  runcmd:
+    - mkdir -p /tmp/registry
+  units:
+    - name: docker-registry.service
+      command: start
+      content: |
+        [Unit]
+        Description=Docker Registry server
+
+        [Service]
+        TimeoutStartSec=0
+        ExecStartPre=-/usr/bin/docker kill docker-registry
+        ExecStartPre=-/usr/bin/docker rm docker-registry
+        ExecStartPre=/usr/bin/docker pull registry:latest        
+        ExecStart=/usr/bin/docker run --rm --name docker-registry -v /etc/registry:/tmp/registry -p 5000:5000 registry:latest
+        ExecStop=/usr/bin/docker kill docker-registry
+
+
+
+
+        

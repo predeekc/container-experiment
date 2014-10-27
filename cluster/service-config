@@ -1,0 +1,21 @@
+#cloud-config
+coreos:
+  etcd:
+    discovery: https://discovery.etcd.io/97bdd42af67e8122e7601b9f962bf6f9
+    addr: $public_ipv4:4001
+    peer-addr: $public_ipv4:7001
+  fleet:
+    public-ip: $public_ipv4
+    metadata: role=services
+  units:
+  - name: etcd.service
+    command: start
+  - name: fleet.service
+    command: start
+write_files:
+- path: /etc/environment-cluster
+  permissions: '0600'
+  owner: core:core
+  content: |
+    DOCKER_REGISTRY=172.17.8.210:5000  
+ 

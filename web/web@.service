@@ -1,0 +1,20 @@
+[Unit]
+Description=Web Site
+Requires=docker.service
+Requires=web-sidekick@%i.service
+
+After=docker.service
+Before=web-sidekick@%i.service
+
+[Service]
+EnvironmentFile=/etc/environment
+EnvironmentFile=/etc/environment-cluster
+TimeoutStartSec=0
+ExecStartPre=-/usr/bin/docker kill web-%i
+ExecStartPre=-/usr/bin/docker rm web-%i
+ExecStartPre=/usr/bin/docker pull ${DOCKER_REGISTRY}/web
+ExecStart=/usr/bin/docker run --name web-%i -p ${COREOS_PUBLIC_IPV4}:%i:80 ${DOCKER_REGISTRY}/web
+ExecStop=/usr/bin/docker stop web-%i
+
+[X-Fleet]
+MachineMetadata=role=worker

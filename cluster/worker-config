@@ -1,0 +1,17 @@
+#cloud-config
+coreos:
+  fleet:
+    public-ip: $public_ipv4
+    metadata: role=worker
+    etcd_servers: 
+  units:
+  - name: fleet.service
+    command: start
+write_files:
+- path: /etc/environment-cluster
+  permissions: '0600'
+  owner: core:core
+  content: |
+    DOCKER_REGISTRY=172.17.8.210:5000
+    ETCDCTL_PEERS=<etcd peers>
+    

@@ -1,0 +1,20 @@
+[Unit]
+Description=nginx based load balancer
+Requires=docker.service
+Requires=etcd.service
+
+After=docker.service
+After=etcd.service
+
+[Service]
+TimeoutStartSec=0
+EnvironmentFile=/etc/environment-cluster
+
+ExecStartPre=-/usr/bin/docker kill load-balancer
+ExecStartPre=-/usr/bin/docker rm load-balancer
+ExecStartPre=/usr/bin/docker pull ${DOCKER_REGISTRY}/load-balancer
+ExecStart=/usr/bin/docker run --rm --name load-balancer -e "HOST_IP=10.1.42.1" -p 80:80 ${DOCKER_REGISTRY}/load-balancer
+ExecStop=/usr/bin/docker kill load-balancer
+
+[X-Fleet]
+MachineMetadata=role=services

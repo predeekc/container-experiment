@@ -1,0 +1,131 @@
+# -*- mode: ruby -*-
+# # vi: set ft=ruby :
+
+require 'fileutils'
+
+Vagrant.require_version ">= 1.6.0"
+
+# Defaults for config options defined in CONFIG
+$num_service_instances = 1
+$num_worker_instances = 2
+$update_channel = "alpha"
+$vb_memory = 1024
+$vb_cpus = 2
+
+def create_vm(vm, name, ip, cloud_config)
+  vm.define vm_name = name do |config|
+    config.vm.hostname = name
+
+    # plugin conflict
+    if Vagrant.has_plugin?("vagrant-vbguest") then
+      config.vbguest.auto_update = false
+    end
+      
+    config.vm.network :private_network, ip: ip
+    config.vm.provision :file, :source => cloud_config, :destination => "/tmp/vagrantfile-user-data"
+    config.vm.provision :shell, :inline => "mv /tmp/vagrantfile-user-data /var/lib/coreos-vagrant/", :privileged => true
+  end
+end
+
+
+if File.exists?('service-config') && ARGV[0].eql?('up')
+  require 'open-uri'
+  require 'yaml'
+
+  token = open('https://discovery.etcd.io/new').read
+
+  data = YAML.load(IO.readlines('service-config')[1..-1].join)
+  data['coreos']['etcd']['discovery'] = token
+
+  lines = YAML.dump(data).split("\n")
+  lines[0] = '#cloud-config'
+
+  open('./.vagrant/.service-config', 'w') do |f|
+    f.puts(lines.join("\n"))
+  end
+end
+
+if File.exists?('worker-config') && ARGV[0].eql?('up')
+  require 'open-uri'
+  require 'yaml'  
+
+  servers = Array.new
+  (1..$num_service_instances).each do |i|
+    servers << "http://172.17.8.#{i+210}:4001"
+  end
+
+  data = YAML.load(IO.readlines('worker-config')[1..-1].join)
+  data['coreos']['fleet']['etcd_servers'] = servers.join(",")
+  data['write_files'][0]['content'] = data['write_files'][0]['content'].gsub(/<etcd peers>/, servers.join(","))
+
+  lines = YAML.dump(data).split("\n")
+  lines[0] = '#cloud-config'
+
+  open('./.vagrant/.worker-config', 'w') do |f|
+    f.puts(lines.join("\n"))
+  end
+end
+
+Vagrant.configure("2") do |config|   
+  config.vm.box = "coreos-%s" % $update_channel
+  config.vm.box_url = "http://%s.release.core-os.net/amd64-usr/current/coreos_production_vagrant.json" % $update_channel 
+
+  config.vm.provider :virtualbox do |v|
+    # On VirtualBox, we don't have guest additions or a functional vboxsf
+    # in CoreOS, so tell Vagrant that so it can be smarter.
+    v.check_guest_additions = false
+    v.functional_vboxsf     = false
+
+    v.gui = false
+    v.memory = $vb_memory
+    v.cpus = $vb_cpus
+  end
+
+  #setup registry machine
+  create_vm(config.vm, "registry", "172.17.8.210", "registry-config")
+
+  # config.vm.define vm_name = "registry" do |config|
+  #   config.vm.hostname = "registry"
+  #   config.vm.network :private_network, ip: "172.17.8.210"
+    
+  #   config.vm.provision :file, :source => "registry-config", :destination => "/tmp/vagrantfile-user-data"
+  #   config.vm.provision :shell, :inline => "mv /tmp/vagrantfile-user-data /var/lib/coreos-vagrant/", :privileged => true      
+  # end
+
+  #setup the coreos service instances
+  (1..$num_service_instances).each do |i|
+
+    create_vm(config.vm, "service-%02d" % i, "172.17.8.#{i+210}", "./.vagrant/.service-config")
+
+    # config.vm.define vm_name = "service-%02d" % i do |config|
+    #   config.vm.hostname = "services-%02d" % i
+
+    #   # plugin conflict
+    #   if Vagrant.has_plugin?("vagrant-vbguest") then
+    #     config.vbguest.auto_update = false
+    #   end
+      
+    #   config.vm.network :private_network, ip: "172.17.8.#{i+210}"
+    #   config.vm.provision :file, :source => "./.vagrant/.service-config", :destination => "/tmp/vagrantfile-user-data"
+    #   config.vm.provision :shell, :inline => "mv /tmp/vagrantfile-user-data /var/lib/coreos-vagrant/", :privileged => true
+    # end
+  end
+
+  #setup the coreos worker instances
+  (1..$num_worker_instances).each do |i|
+    create_vm(config.vm, "worker-%02d" % i, "172.17.8.#{i+220}", "./.vagrant/.worker-config")
+
+    # config.vm.define vm_name = "worker-%02d" % i do |config|
+    #   config.vm.hostname = "worker-%02d" % i
+
+    #   # plugin conflict
+    #   if Vagrant.has_plugin?("vagrant-vbguest") then
+    #     config.vbguest.auto_update = false
+    #   end
+      
+    #   config.vm.network :private_network, ip: "172.17.8.#{i+220}"
+    #   config.vm.provision :file, :source => "./.vagrant/.worker-config", :destination => "/tmp/vagrantfile-user-data"
+    #   config.vm.provision :shell, :inline => "mv /tmp/vagrantfile-user-data /var/lib/coreos-vagrant/", :privileged => true
+    # end
+  end
+end
