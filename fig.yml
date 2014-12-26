@@ -1,0 +1,15 @@
+elasticsearch:
+  build: ./logger-elasticsearch
+  ports:
+   - "9200:9200"
+   - "9300:9300"
+kibana:
+  build: ./kibana  
+  links:
+    - "elasticsearch"
+  ports:
+    - "8000:80"
+logger:
+  build: ./fluentd
+  links:
+    - "elasticsearch"  
